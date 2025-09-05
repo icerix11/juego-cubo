@@ -223,35 +223,17 @@
                 if (!peer) initPeer();
                 
                 // Conectar al otro jugador
-                conn = peer.connect(otherPeerId);
-                setupConnection(conn);
-                
-                // Crear jugador local
-                players[myPlayerId] = {
-                    x: 400,
-                    y: 300,
-                    width: 50,
-                    height: 50,
-                    color: '#3498db',
-                    id: myPlayerId
-                };
+                try {
+                    conn = peer.connect(otherPeerId);
+                    setupConnection(conn);
+                } catch (err) {
+                    console.error('Error al conectar:', err);
+                    alert('Error al conectar: ' + err.message);
+                }
             });
 
-            // Configuración del jugador local
-            const player = {
-                x: canvas.width / 2 - 25,
-                y: canvas.height / 2 - 25,
-                width: 50,
-                height: 50,
-                speed: 5,
-                dx: 0,
-                dy: 0,
-                color: '#3498db',
-                id: myPlayerId
-            };
-            
-            // Agregar jugador local al objeto de jugadores
-            players[myPlayerId] = player;
+            // Configuración inicial del jugador local
+            // (Ahora se mueve a la función initGame)
 
             // Dibujar todos los jugadores
             function drawPlayers() {
@@ -352,13 +334,25 @@
             // Inicializar el juego
             function initGame() {
                 if (loadingElement) loadingElement.classList.add('hidden');
+                
+                // Crear jugador local inmediatamente
+                players[myPlayerId] = {
+                    x: canvas.width / 2 - 25,
+                    y: canvas.height / 2 - 25,
+                    width: 50,
+                    height: 50,
+                    speed: 5,
+                    dx: 0,
+                    dy: 0,
+                    color: '#3498db',
+                    id: myPlayerId
+                };
+                
                 gameLoop();
             }
 
-            // Iniciar el juego después de cargar
-            setTimeout(initGame, 500);
-            
-            // Inicializar PeerJS cuando se cargue la página
+            // Inicializar el juego y PeerJS
+            initGame();
             initPeer();
         });
     </script>
