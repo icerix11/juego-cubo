@@ -13,11 +13,15 @@
             height: 100vh;
             background-color: #f0f0f0;
             overflow: hidden;
+            font-family: Arial, sans-serif;
         }
-        canvas {
+        #gameContainer {
+            position: relative;
+        }
+        #gameCanvas {
             background-color: white;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            display: none; /* Ocultar hasta que cargue */
+            display: block;
         }
         #loading {
             position: absolute;
@@ -25,13 +29,115 @@
             left: 50%;
             transform: translate(-50%, -50%);
             font-size: 24px;
-            font-family: Arial, sans-serif;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+        .hidden {
+            display: none !important;
         }
     </style>
 </head>
 <body>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
-    <div id="loading">Cargando juego...</div>
-    <script src="/game.js" defer></script>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="loading">Cargando juego...</div>
+    </div>
+
+    <script>
+        // Esperar a que el DOM esté completamente cargado
+        document.addEventListener('DOMContentLoaded', function() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const loadingElement = document.getElementById('loading');
+
+            // Configuración del cubo
+            const cube = {
+                x: canvas.width / 2 - 25,
+                y: canvas.height / 2 - 25,
+                width: 50,
+                height: 50,
+                speed: 5,
+                dx: 0,
+                dy: 0,
+                color: '#3498db'
+            };
+
+            // Dibujar el cubo
+            function drawCube() {
+                ctx.fillStyle = cube.color;
+                ctx.fillRect(cube.x, cube.y, cube.width, cube.height);
+            }
+
+            // Limpiar el canvas
+            function clear() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+
+            // Actualizar la posición del cubo
+            function update() {
+                // Actualizar posición
+                cube.x += cube.dx;
+                cube.y += cube.dy;
+
+                // Detección de bordes
+                if (cube.x < 0) cube.x = 0;
+                if (cube.x + cube.width > canvas.width) cube.x = canvas.width - cube.width;
+                if (cube.y < 0) cube.y = 0;
+                if (cube.y + cube.height > canvas.height) cube.y = canvas.height - cube.height;
+            }
+
+            // Control del teclado
+            function keyDown(e) {
+                if (e.key === 'ArrowRight' || e.key === 'd') {
+                    cube.dx = cube.speed;
+                } else if (e.key === 'ArrowLeft' || e.key === 'a') {
+                    cube.dx = -cube.speed;
+                } else if (e.key === 'ArrowDown' || e.key === 's') {
+                    cube.dy = cube.speed;
+                } else if (e.key === 'ArrowUp' || e.key === 'w') {
+                    cube.dy = -cube.speed;
+                }
+            }
+
+            function keyUp(e) {
+                if (
+                    e.key === 'ArrowRight' || 
+                    e.key === 'd' || 
+                    e.key === 'ArrowLeft' || 
+                    e.key === 'a'
+                ) {
+                    cube.dx = 0;
+                }
+                if (
+                    e.key === 'ArrowDown' || 
+                    e.key === 's' || 
+                    e.key === 'ArrowUp' || 
+                    e.key === 'w'
+                ) {
+                    cube.dy = 0;
+                }
+            }
+
+            // Bucle principal del juego
+            function gameLoop() {
+                clear();
+                update();
+                drawCube();
+                requestAnimationFrame(gameLoop);
+            }
+
+            // Event listeners para el teclado
+            document.addEventListener('keydown', keyDown);
+            document.addEventListener('keyup', keyUp);
+
+            // Ocultar mensaje de carga y comenzar el juego
+            setTimeout(function() {
+                if (loadingElement) loadingElement.classList.add('hidden');
+                gameLoop();
+            }, 500);
+        });
+    </script>
 </body>
 </html>
