@@ -112,7 +112,20 @@
         let conn;
         let myPeerId;
         let players = {};
-        let myPlayerId;
+        let myPlayerId = 'local-player-' + Math.random().toString(36).substr(2, 9);
+        
+        // Crear jugador local inmediatamente
+        players[myPlayerId] = {
+            x: 400,
+            y: 300,
+            width: 50,
+            height: 50,
+            speed: 5,
+            dx: 0,
+            dy: 0,
+            color: '#3498db',
+            id: myPlayerId
+        };
 
         // Esperar a que el DOM esté completamente cargado
         document.addEventListener('DOMContentLoaded', function() {
@@ -126,8 +139,8 @@
 
             // Inicializar PeerJS
             function initPeer() {
-                // Generar un ID aleatorio para este jugador
-                myPlayerId = 'player-' + Math.random().toString(36).substr(2, 9);
+                // Usar el ID ya generado o crear uno nuevo
+                myPlayerId = myPlayerId || 'player-' + Math.random().toString(36).substr(2, 9);
                 
                 // Crear una nueva instancia de Peer
                 peer = new Peer(myPlayerId, { config });
@@ -241,19 +254,28 @@
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 
                 // Dibujar a todos los jugadores
-                Object.values(players).forEach(player => {
-                    ctx.fillStyle = player.color;
+                Object.entries(players).forEach(([id, player]) => {
+                    if (!player) return;
+                    
+                    ctx.fillStyle = player.color || '#3498db';
                     ctx.fillRect(player.x, player.y, player.width, player.height);
                     
                     // Dibujar ID del jugador
                     ctx.fillStyle = '#000';
                     ctx.font = '12px Arial';
                     ctx.textAlign = 'center';
-                    ctx.fillText(
-                        player.id === myPlayerId ? 'Tú' : 'Jugador ' + player.id.substring(0, 4), 
-                        player.x + player.width / 2, 
-                        player.y - 5
-                    );
+                    
+                    if (player.id) {
+                        const displayText = player.id === myPlayerId 
+                            ? 'Tú' 
+                            : 'Jugador ' + (player.id.substring ? player.id.substring(0, 4) : '??');
+                        
+                        ctx.fillText(
+                            displayText,
+                            player.x + player.width / 2, 
+                            player.y - 5
+                        );
+                    }
                 });
             }
 
@@ -335,18 +357,11 @@
             function initGame() {
                 if (loadingElement) loadingElement.classList.add('hidden');
                 
-                // Crear jugador local inmediatamente
-                players[myPlayerId] = {
-                    x: canvas.width / 2 - 25,
-                    y: canvas.height / 2 - 25,
-                    width: 50,
-                    height: 50,
-                    speed: 5,
-                    dx: 0,
-                    dy: 0,
-                    color: '#3498db',
-                    id: myPlayerId
-                };
+                // Asegurarse de que el jugador local tenga posición inicial
+                if (players[myPlayerId]) {
+                    players[myPlayerId].x = canvas.width / 2 - 25;
+                    players[myPlayerId].y = canvas.height / 2 - 25;
+                }
                 
                 gameLoop();
             }
