@@ -3,39 +3,81 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Juego del Cubo</title>
+    <title>Juego del Cubo - Multijugador P2P</title>
     <style>
         body {
             margin: 0;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
             height: 100vh;
             background-color: #f0f0f0;
-            overflow: hidden;
             font-family: Arial, sans-serif;
+            padding: 20px;
+            box-sizing: border-box;
         }
         #gameContainer {
             position: relative;
+            margin-bottom: 20px;
         }
         #gameCanvas {
             background-color: white;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
             display: block;
         }
-        #loading {
+        #loading, #connectionStatus {
             position: absolute;
-            top: 50%;
+            top: 10px;
             left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 24px;
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            transform: translateX(-50%);
+            font-size: 18px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px 20px;
+            border-radius: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+        #connectionStatus {
+            top: 50px;
+            display: none;
         }
         .hidden {
             display: none !important;
+        }
+        #controls {
+            margin-top: 20px;
+            text-align: center;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 0 10px;
+            cursor: pointer;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        #peerId {
+            margin-top: 10px;
+            padding: 8px;
+            width: 200px;
+            text-align: center;
+            font-family: monospace;
+        }
+        .player-info {
+            position: absolute;
+            font-size: 12px;
+            color: white;
+            background: rgba(0,0,0,0.5);
+            padding: 2px 5px;
+            border-radius: 3px;
+            pointer-events: none;
         }
     </style>
 </head>
@@ -43,17 +85,160 @@
     <div id="gameContainer">
         <canvas id="gameCanvas" width="800" height="600"></canvas>
         <div id="loading">Cargando juego...</div>
+        <div id="connectionStatus">Desconectado</div>
+    </div>
+    
+    <div id="controls">
+        <button id="createGame">Crear Partida</button>
+        <div>
+            <input type="text" id="peerId" placeholder="ID del otro jugador" disabled>
+            <button id="connectToPeer">Conectar</button>
+        </div>
     </div>
 
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script>
+        // Configuración del juego
+        const config = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' }
+            ]
+        };
+
+        // Variables globales
+        let peer;
+        let conn;
+        let myPeerId;
+        let players = {};
+        let myPlayerId;
+
         // Esperar a que el DOM esté completamente cargado
         document.addEventListener('DOMContentLoaded', function() {
             const canvas = document.getElementById('gameCanvas');
             const ctx = canvas.getContext('2d');
             const loadingElement = document.getElementById('loading');
+            const connectionStatus = document.getElementById('connectionStatus');
+            const createGameBtn = document.getElementById('createGame');
+            const connectBtn = document.getElementById('connectToPeer');
+            const peerIdInput = document.getElementById('peerId');
 
-            // Configuración del cubo
-            const cube = {
+            // Inicializar PeerJS
+            function initPeer() {
+                // Generar un ID aleatorio para este jugador
+                myPlayerId = 'player-' + Math.random().toString(36).substr(2, 9);
+                
+                // Crear una nueva instancia de Peer
+                peer = new Peer(myPlayerId, { config });
+
+                peer.on('open', function(id) {
+                    console.log('Mi ID de conexión es: ' + id);
+                    myPeerId = id;
+                    peerIdInput.placeholder = 'Tu ID: ' + id;
+                    peerIdInput.disabled = false;
+                    connectionStatus.textContent = 'Esperando conexión...';
+                    connectionStatus.style.display = 'block';
+                    connectionStatus.style.backgroundColor = '#f39c12';
+                });
+
+                // Manejar conexiones entrantes
+                peer.on('connection', function(connection) {
+                    setupConnection(connection);
+                });
+
+                peer.on('error', function(err) {
+                    console.error('Error de conexión:', err);
+                    connectionStatus.textContent = 'Error de conexión: ' + err.message;
+                    connectionStatus.style.backgroundColor = '#e74c3c';
+                });
+            }
+
+            // Configurar una conexión
+            function setupConnection(connection) {
+                conn = connection;
+                conn.on('open', function() {
+                    console.log('Conexión establecida con ' + conn.peer);
+                    connectionStatus.textContent = 'Conectado a ' + conn.peer.substring(0, 8) + '...';
+                    connectionStatus.style.backgroundColor = '#2ecc71';
+                    
+                    // Crear jugador remoto
+                    players[conn.peer] = {
+                        x: 100,
+                        y: 100,
+                        width: 50,
+                        height: 50,
+                        color: '#e74c3c',
+                        id: conn.peer
+                    };
+                    
+                    // Enviar información del jugador local
+                    sendPlayerData();
+                });
+
+                conn.on('data', function(data) {
+                    // Actualizar posición del jugador remoto
+                    if (data.type === 'playerUpdate' && players[data.id]) {
+                        players[data.id].x = data.x;
+                        players[data.id].y = data.y;
+                    }
+                });
+
+                conn.on('close', function() {
+                    console.log('Conexión cerrada');
+                    connectionStatus.textContent = 'Desconectado';
+                    connectionStatus.style.backgroundColor = '#e74c3c';
+                    delete players[conn.peer];
+                });
+            }
+
+            // Enviar datos del jugador al otro jugador
+            function sendPlayerData() {
+                if (conn && conn.open) {
+                    conn.send({
+                        type: 'playerUpdate',
+                        id: myPlayerId,
+                        x: players[myPlayerId].x,
+                        y: players[myPlayerId].y
+                    });
+                }
+            }
+
+            // Configurar botones de la interfaz
+            createGameBtn.addEventListener('click', function() {
+                if (!peer) initPeer();
+                peerIdInput.placeholder = 'Comparte tu ID: ' + myPeerId;
+                peerIdInput.select();
+                document.execCommand('copy');
+                alert('ID copiado al portapapeles! Compártelo con tu amigo.');
+            });
+
+            connectBtn.addEventListener('click', function() {
+                const otherPeerId = peerIdInput.value.trim();
+                if (!otherPeerId) {
+                    alert('Por favor ingresa un ID de jugador');
+                    return;
+                }
+                
+                if (!peer) initPeer();
+                
+                // Conectar al otro jugador
+                conn = peer.connect(otherPeerId);
+                setupConnection(conn);
+                
+                // Crear jugador local
+                players[myPlayerId] = {
+                    x: 400,
+                    y: 300,
+                    width: 50,
+                    height: 50,
+                    color: '#3498db',
+                    id: myPlayerId
+                };
+            });
+
+            // Configuración del jugador local
+            const player = {
                 x: canvas.width / 2 - 25,
                 y: canvas.height / 2 - 25,
                 width: 50,
@@ -61,13 +246,33 @@
                 speed: 5,
                 dx: 0,
                 dy: 0,
-                color: '#3498db'
+                color: '#3498db',
+                id: myPlayerId
             };
+            
+            // Agregar jugador local al objeto de jugadores
+            players[myPlayerId] = player;
 
-            // Dibujar el cubo
-            function drawCube() {
-                ctx.fillStyle = cube.color;
-                ctx.fillRect(cube.x, cube.y, cube.width, cube.height);
+            // Dibujar todos los jugadores
+            function drawPlayers() {
+                // Limpiar el canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Dibujar a todos los jugadores
+                Object.values(players).forEach(player => {
+                    ctx.fillStyle = player.color;
+                    ctx.fillRect(player.x, player.y, player.width, player.height);
+                    
+                    // Dibujar ID del jugador
+                    ctx.fillStyle = '#000';
+                    ctx.font = '12px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(
+                        player.id === myPlayerId ? 'Tú' : 'Jugador ' + player.id.substring(0, 4), 
+                        player.x + player.width / 2, 
+                        player.y - 5
+                    );
+                });
             }
 
             // Limpiar el canvas
@@ -75,40 +280,53 @@
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
             }
 
-            // Actualizar la posición del cubo
+            // Actualizar la posición del jugador local
             function update() {
-                // Actualizar posición
-                cube.x += cube.dx;
-                cube.y += cube.dy;
+                if (!players[myPlayerId]) return;
+                
+                // Actualizar posición del jugador local
+                players[myPlayerId].x += players[myPlayerId].dx;
+                players[myPlayerId].y += players[myPlayerId].dy;
 
                 // Detección de bordes
-                if (cube.x < 0) cube.x = 0;
-                if (cube.x + cube.width > canvas.width) cube.x = canvas.width - cube.width;
-                if (cube.y < 0) cube.y = 0;
-                if (cube.y + cube.height > canvas.height) cube.y = canvas.height - cube.height;
+                if (players[myPlayerId].x < 0) players[myPlayerId].x = 0;
+                if (players[myPlayerId].x + players[myPlayerId].width > canvas.width) 
+                    players[myPlayerId].x = canvas.width - players[myPlayerId].width;
+                if (players[myPlayerId].y < 0) players[myPlayerId].y = 0;
+                if (players[myPlayerId].y + players[myPlayerId].height > canvas.height) 
+                    players[myPlayerId].y = canvas.height - players[myPlayerId].height;
+                
+                // Enviar actualización de posición a otros jugadores
+                if (conn && conn.open) {
+                    sendPlayerData();
+                }
             }
 
             // Control del teclado
             function keyDown(e) {
+                if (!players[myPlayerId]) return;
+                
                 if (e.key === 'ArrowRight' || e.key === 'd') {
-                    cube.dx = cube.speed;
+                    players[myPlayerId].dx = players[myPlayerId].speed;
                 } else if (e.key === 'ArrowLeft' || e.key === 'a') {
-                    cube.dx = -cube.speed;
+                    players[myPlayerId].dx = -players[myPlayerId].speed;
                 } else if (e.key === 'ArrowDown' || e.key === 's') {
-                    cube.dy = cube.speed;
+                    players[myPlayerId].dy = players[myPlayerId].speed;
                 } else if (e.key === 'ArrowUp' || e.key === 'w') {
-                    cube.dy = -cube.speed;
+                    players[myPlayerId].dy = -players[myPlayerId].speed;
                 }
             }
 
             function keyUp(e) {
+                if (!players[myPlayerId]) return;
+                
                 if (
                     e.key === 'ArrowRight' || 
                     e.key === 'd' || 
                     e.key === 'ArrowLeft' || 
                     e.key === 'a'
                 ) {
-                    cube.dx = 0;
+                    players[myPlayerId].dx = 0;
                 }
                 if (
                     e.key === 'ArrowDown' || 
@@ -116,15 +334,14 @@
                     e.key === 'ArrowUp' || 
                     e.key === 'w'
                 ) {
-                    cube.dy = 0;
+                    players[myPlayerId].dy = 0;
                 }
             }
 
             // Bucle principal del juego
             function gameLoop() {
-                clear();
                 update();
-                drawCube();
+                drawPlayers();
                 requestAnimationFrame(gameLoop);
             }
 
@@ -132,11 +349,17 @@
             document.addEventListener('keydown', keyDown);
             document.addEventListener('keyup', keyUp);
 
-            // Ocultar mensaje de carga y comenzar el juego
-            setTimeout(function() {
+            // Inicializar el juego
+            function initGame() {
                 if (loadingElement) loadingElement.classList.add('hidden');
                 gameLoop();
-            }, 500);
+            }
+
+            // Iniciar el juego después de cargar
+            setTimeout(initGame, 500);
+            
+            // Inicializar PeerJS cuando se cargue la página
+            initPeer();
         });
     </script>
 </body>
